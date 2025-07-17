@@ -1,0 +1,4 @@
+# openproject-mcp/requirements.txt
+google-adk
+mcp
+python-dotenv

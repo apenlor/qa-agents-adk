@@ -1,0 +1,50 @@
+services:
+  openproject:
+    image: openproject/openproject:16
+    container_name: openproject
+    ports:
+      - "8080:80"
+    environment:
+      - OPENPROJECT_HOST__NAME=localhost:8080
+      - OPENPROJECT_SECRET_KEY_BASE=openprojectkey
+      - OPENPROJECT_HTTPS=false
+      - OPENPROJECT_HSTS=false
+    volumes:
+      - op_pgdata:/var/openproject/pgdata
+      - op_assets:/var/openproject/assets
+    networks:
+      - qe-agents-network
+    restart: always
+
+  openproject-proxy:
+    image: nginx:latest
+    container_name: openproject-proxy
+    volumes:
+      - ./openproject-mcp/proxy/nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - openproject
+    networks:
+      - qe-agents-network
+    restart: on-failure
+
+  openproject-mcp:
+    build:
+      context: ./openproject-mcp
+      dockerfile: Dockerfile
+    container_name: openproject-mcp
+    env_file:
+      - ./openproject-mcp/.env
+    ports:
+      - "50051:50051"
+    depends_on:
+      - openproject-proxy
+    networks:
+      - qe-agents-network
+    restart: on-failure
+
+volumes:
+  op_pgdata:
+  op_assets:
+networks:
+  qe-agents-network:
+    driver: bridge
