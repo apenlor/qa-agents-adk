@@ -1,0 +1,29 @@
+# .gitignore en la RAÍZ del proyecto
+
+# Entornos virtuales de Python
+/venv/
+/.venv/
+/env/
+
+# Ficheros de configuración local y secretos
+.env
+.env.*
+instance/
+
+# Caches y artefactos de Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Artefactos de Build y Distribución
+/build/
+/dist/
+*.egg-info/
+
+# Ficheros de IDE y Sistema Operativo
+.idea/
+.vscode/
+*.log
+*.swp
+.DS_Store
