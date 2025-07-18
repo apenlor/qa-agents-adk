@@ -15,6 +15,12 @@ services:
     networks:
       - qe-agents-network
     restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health_checks/default"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   openproject-proxy:
     image: nginx:latest
@@ -22,7 +28,8 @@ services:
     volumes:
       - ./openproject-mcp/proxy/nginx.conf:/etc/nginx/conf.d/default.conf
     depends_on:
-      - openproject
+      openproject:
+        condition: service_started
     networks:
       - qe-agents-network
     restart: on-failure
@@ -35,9 +42,10 @@ services:
     env_file:
       - ./openproject-mcp/.env
     ports:
-      - "50051:50051"
+      - "8000:8000"
     depends_on:
-      - openproject-proxy
+      openproject:
+        condition: service_healthy
     networks:
       - qe-agents-network
     restart: on-failure

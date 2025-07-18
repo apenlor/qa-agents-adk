@@ -1,93 +1,140 @@
 # QE Agents ADK
 
+This repository contains a Proof of Concept (POC) for integrating QE agents with an OpenProject instance. It features a custom MCP (Model Context Protocol) server built with `FastMCP` that exposes the OpenProject API as a set of tools for consumption by AI agents.
 
+## Prerequisites
 
-## Getting started
+To run this proof of concept, you will need the following software installed on your machine:
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+*   **Docker**
+*   **Docker Compose**
+*   **Python 3.10+** (for running the test script)
+*   **pip** (for installing test dependencies)
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## Getting Started
 
-## Add your files
+Follow these steps to configure and run the entire stack.
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+### 1. Initial Setup: Get the OpenProject API Key
+
+The MCP server requires an API key to communicate with the OpenProject instance. The best way to get this key is to start *only* the OpenProject container first.
+
+1.  **Start OpenProject Service**: Run the following command to start just the OpenProject container, ignoring the other services for now.
+    ```bash
+    docker-compose up -d openproject
+    ```
+
+2.  **Log In and Generate Key**:
+    *   Wait a minute for the service to become healthy (`docker-compose ps` should show it as `healthy`).
+    *   Navigate to `http://localhost:8080` in your browser.
+    *   Log in with the default credentials: `admin` / `admin`. You will be prompted to change the password.
+    *   Once logged in, navigate to your user avatar (top-right) -> **Account Settings** -> **Access Tokens**.
+    *   Under the **API** section, click **Generate**.
+    *   **Copy the generated API key**. You will need it in the next step.
+
+3.  **Stop the Container**: This will stop the OpenProject service.
+    ```bash
+    docker-compose down
+    ```
+
+### 2. Configure the Environment
+
+Create a `.env` file for the MCP server and add the API key you just generated.
+
+1.  **Create the file**:
+    ```bash
+    touch openproject-mcp/.env
+    ```
+
+2.  **Add the following content** to `openproject-mcp/.env`, replacing `YOUR_API_KEY_HERE` with the key you copied.
+
+    ```env
+    # Get this key from your OpenProject user profile:
+    # Account Settings -> Access Tokens -> Generate
+    OPENPROJECT_API_KEY="YOUR_API_KEY_HERE"
+
+    # Internal Docker network URL for the OpenProject instance. Do not change.
+    OPENPROJECT_URL=http://openproject-proxy:80
+    ```
+
+### 3. Running the Full Stack
+
+With the configuration in place, you can now launch all the services.
+
+```bash
+docker-compose up --build -d
+```
+
+You can check the status of the containers with `docker-compose ps` and view the logs of any service, for example, the MCP server:
+```bash
+docker-compose logs -f openproject-mcp
+```
+
+## Components
+
+### OpenProject MCP Server (`openproject-mcp`)
+
+This service acts as the bridge between the OpenProject API and the AI agents.
+
+*   **Technology**: It is built using **Python** and the **FastMCP** library.
+*   **Functionality**: It automatically loads the OpenAPI specification from the running OpenProject instance, converts all API endpoints into MCP-compliant tools, and exposes them over a `streamable-http` transport.
+*   **OpenAPI Patching**: The official OpenProject OpenAPI spec has some structural inconsistencies and does not declare all optional fields as nullable. The `openapi_loader.py` script applies patches on-the-fly to fix these issues, ensuring the spec is valid and preventing validation errors at runtime.
+
+#### Testing the MCP Server
+
+An end-to-end test script is included to verify that the MCP server is running correctly and is properly integrated with the OpenProject API.
+
+1.  **Install Test Dependencies**:
+    ```bash
+    pip install -r openproject-mcp/tests/requirements.txt
+    ```
+
+2.  **Run the Test**:
+    ```bash
+    python openproject-mcp/tests/test_mcp_server.py
+    ```
+    This script will:
+    *   Connect to the MCP server at `http://localhost:8000/mcp`.
+    *   List all available tools to confirm the server is operational.
+    *   Execute the `view_work_package` tool for a specific Work Package ID to validate the full end-to-end connection.
+
+### Analysis Agent (`analysis-agent`)
+
+*(To be implemented)*
+
+This component is intended to house an agent responsible for analyzing data retrieved from OpenProject.
+
+### Codegen Agent (`codegen-agent`)
+
+*(To be implemented)*
+
+This component is intended to house an agent responsible for code generation tasks based on requirements from OpenProject.
+
+## Project Structure
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.sngular.com/standards/code/QA/pocs/qe-agents-adk.git
-git branch -M main
-git push -uf origin main
+.
+├── README.md
+├── analysis-agent
+│   ├── Dockerfile
+│   ├── config.py
+│   ├── main.py
+│   └── requirements.txt
+├── codegen-agent
+│   ├── Dockerfile
+│   ├── config.py
+│   ├── main.py
+│   └── requirements.txt
+├── docker-compose.yml
+└── openproject-mcp
+    ├── Dockerfile
+    ├── config.py
+    ├── openapi_loader.py
+    ├── proxy
+    │   └── nginx.conf
+    ├── requirements.txt
+    ├── server.py
+    └── tests
+        ├── requirements.txt
+        └── test_mcp_server.py
 ```
-
-## Integrate with your tools
-
-- [ ] [Set up project integrations](https://gitlab.sngular.com/standards/code/QA/pocs/qe-agents-adk/-/settings/integrations)
-
-## Collaborate with your team
-
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.

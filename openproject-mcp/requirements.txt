@@ -1,4 +1,4 @@
 # openproject-mcp/requirements.txt
-google-adk
-mcp
+fastmcp
+httpx
 python-dotenv
