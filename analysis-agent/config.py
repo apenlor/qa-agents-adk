@@ -2,14 +2,19 @@
 
 import logging
 import os
+from dotenv import load_dotenv
 
+load_dotenv()
+# Set default log level to INFO, but allow overriding via environment variable.
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
-    level=logging.INFO,
+    level=LOG_LEVEL,
     format="%(asctime)s - [%(levelname)s] - %(name)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 
 logger = logging.getLogger("analysis-agent-logger")
+logging.getLogger("google_adk.google.adk.tools.base_authenticated_tool").setLevel(logging.ERROR)
 
 def _get_required_env(var_name: str) -> str:
     """Gets a required environment variable, raising an error if not found."""

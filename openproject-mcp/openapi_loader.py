@@ -85,12 +85,57 @@ def _patch_make_all_properties_nullable(spec: dict) -> dict:
 
     return spec
 
+def _patch_remove_problematic_required_fields(spec: dict) -> dict:
+    """
+    Removes specific fields from the 'required' list of their schemas.
+
+    This patch targets fields that the OpenAPI spec declares as required, but
+    the API sometimes omits from the response, causing validation errors.
+    """
+    logger.info("Applying patch to remove problematic 'required' fields...")
+    schemas = spec.get('components', {}).get('schemas', {})
+
+    def _remove_from_required(schema_def: dict, field_name: str, model_name: str):
+        """Helper to remove a field from 'required' lists, including in 'allOf'."""
+        lists_to_check = []
+        if 'required' in schema_def:
+            lists_to_check.append(schema_def['required'])
+        for sub_schema in schema_def.get('allOf', []):
+            if isinstance(sub_schema, dict) and 'required' in sub_schema:
+                lists_to_check.append(sub_schema['required'])
+
+        for req_list in lists_to_check:
+            if field_name in req_list:
+                req_list.remove(field_name)
+                logger.debug(f"Removed '{field_name}' from 'required' list in {model_name}.")
+
+    try:
+        # Error: "'title' is a required property" for list_work_package_attachments
+        # The response items for this tool are of type AttachmentModel.
+        _remove_from_required(schemas['AttachmentModel'], 'title', 'AttachmentModel')
+
+        # Error: "'children' is a required property" for view_work_package
+        # The 'children' field is in the '_links' object of the WorkPackageModel.
+        work_package_links_schema = schemas['WorkPackageModel']['properties']['_links']
+        _remove_from_required(work_package_links_schema, 'children', 'WorkPackageModel._links')
+
+        # Error: "{'algorithm': 'md5', ...} is not of type 'string', 'null'"
+        digest_property = schemas['AttachmentModel']['properties']['digest']
+        logger.info("Applying patch to AttachmentModel.digest to change type to 'object'...")
+        digest_property['type'] = ['object', 'null']
+        _remove_from_required(schemas['AttachmentModel'], 'digest', 'AttachmentModel')
+    except KeyError as e:
+        logger.error(f"Could not apply 'required' field patch. Schema structure may have changed. Error: {e}")
+
+    return spec
+
 def _patch_spec(spec: dict) -> dict:
     """
      Internal function to apply multiple, sequential patches to the OpenAPI spec.
      """
     logger.info("Applying patches to the OpenAPI spec...")
     spec = _patch_group_model(spec)
+    spec = _patch_remove_problematic_required_fields(spec)
     spec = _patch_make_all_properties_nullable(spec)
     logger.info("Finished applying all patches to the spec.")
     return spec

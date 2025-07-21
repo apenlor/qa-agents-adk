@@ -11,10 +11,20 @@ from google.adk.agents import LlmAgent
 # the API for downloading attachments or performing the work package update), but for a
 # POC, this approach demonstrates the full potential of an autonomous agent.
 
+REQUIRED_TOOLS_FOR_POC = [
+    "view_work_package",
+    "list_statuses",
+    "list_work_package_attachments",
+    "view_attachment",
+    "create_work_package_attachment",
+    "update_work_package",
+]
+
 toolset = MCPToolset(
     connection_params=StreamableHTTPConnectionParams(
         url="http://openproject-mcp:8000/mcp",
-    )
+    ),
+    tool_filter=REQUIRED_TOOLS_FOR_POC
 )
 
 analysis_agent = LlmAgent(
