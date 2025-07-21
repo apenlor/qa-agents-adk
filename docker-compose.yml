@@ -16,7 +16,7 @@ services:
       - qe-agents-network
     restart: always
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health_checks/default"]
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/health_checks/default" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -46,6 +46,22 @@ services:
     depends_on:
       openproject:
         condition: service_healthy
+    networks:
+      - qe-agents-network
+    restart: on-failure
+
+  analysis-agent:
+    build:
+      context: ./analysis-agent
+      dockerfile: Dockerfile
+    container_name: analysis-agent
+    env_file:
+      - ./analysis-agent/.env
+    ports:
+      - "8081:8081"
+    depends_on:
+      openproject-mcp:
+        condition: service_started
     networks:
       - qe-agents-network
     restart: on-failure
