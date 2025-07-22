@@ -1,9 +1,9 @@
 # openproject-mcp/server.py
 import httpx
 import json
-import base64
 from fastmcp import FastMCP
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
+from fastmcp.utilities.types import Image
 
 from config import logger, OPENPROJECT_API_KEY, OPENPROJECT_URL
 
@@ -12,7 +12,7 @@ client = httpx.AsyncClient(base_url=OPENPROJECT_URL, auth=("apikey", OPENPROJECT
 
 
 async def _get_raw_work_package_details(work_package_id)-> Dict[str, Any]:
-    logger.info(f"Tool executed: get_work_package_details(id={work_package_id})")
+    logger.debug(f"Fetching raw details for work package ID: {work_package_id}")
     response = await client.get(f"/api/v3/work_packages/{work_package_id}")
     response.raise_for_status()
     return response.json()
@@ -21,13 +21,8 @@ async def _get_raw_work_package_details(work_package_id)-> Dict[str, Any]:
 async def get_work_package_details(work_package_id: int) -> Dict[str, Any]:
     """
     Gets a filtered, essential set of details for a specific work package.
-    This provides the agent with only the information it needs, reducing token usage
-    and simplifying its context.
     """
-    logger.info(f"Tool executed: get_work_package_details(id={work_package_id})")
     full_wp = await _get_raw_work_package_details(work_package_id)
-
-    # Extract only the fields the agent absolutely needs.
     filtered_details = {
         "id": full_wp.get("id"),
         "subject": full_wp.get("subject"),
@@ -35,9 +30,8 @@ async def get_work_package_details(work_package_id: int) -> Dict[str, Any]:
         "description": full_wp.get("description", {}).get("raw"),
         "status": full_wp.get("_embedded", {}).get("status", {}).get("name"),
     }
-    logger.info(f"Returning filtered details for WP {work_package_id}: {filtered_details}")
+    logger.info(f"Tool Success: get_work_package_details -> Returning filtered details for WP {work_package_id}")
     return filtered_details
-
 
 @mcp.tool
 async def get_work_package_attachments(work_package_id: int) -> List[Dict[str, Any]]:
@@ -49,16 +43,12 @@ async def get_work_package_attachments(work_package_id: int) -> List[Dict[str, A
 
 
 @mcp.tool
-async def get_attachment_content(attachment_id: int) -> Dict[str, str]:
+async def get_attachment_content(attachment_id: int) -> Union[Image, str]:
     """
-    Gets the content of a single attachment by its ID. It fetches the
-    attachment's metadata to find its download URL and MIME type, then downloads
-    the raw content and returns it as a Base64 encoded string along with its
-    MIME type.
+    Gets the content of a single attachment. If the attachment is an image,
+    it returns an ImageContent. Otherwise, it returns the content as a plain string.
     """
     logger.info(f"Tool executed: get_attachment_content(id={attachment_id})")
-
-    # Step 1: Get attachment metadata to find the download URL and content type.
     try:
         meta_response = await client.get(f"/api/v3/attachments/{attachment_id}")
         meta_response.raise_for_status()
@@ -67,70 +57,70 @@ async def get_attachment_content(attachment_id: int) -> Dict[str, str]:
         download_url = attachment_data["_links"]["downloadLocation"]["href"]
         file_name = attachment_data.get("fileName", "unknown_file")
         content_type = attachment_data.get("contentType", "application/octet-stream")
-
         logger.info(f"Found download URL for '{file_name}' (type: {content_type})")
-    except (KeyError, httpx.HTTPStatusError) as e:
-        logger.error(f"Could not retrieve metadata for attachment {attachment_id}: {e}")
-        return {"mime_type": "text/plain",
-                "data": f"[ERROR: Could not retrieve metadata for attachment {attachment_id}]"}
 
-    # Step 2: Download the raw binary content
-    try:
         content_response = await client.get(download_url)
         content_response.raise_for_status()
         file_bytes = content_response.content
+
+        if content_type.startswith('image/'):
+            logger.info(f"Returning fastmcp.utilities.types.Image for '{file_name}'.")
+            return Image(data=file_bytes)
+        else:
+            logger.info(f"Returning plain string for '{file_name}'.")
+            return file_bytes.decode('utf-8', errors='replace')
+
     except Exception as e:
-        logger.error(f"Failed to download content for attachment {attachment_id}: {e}")
-        return {"mime_type": "text/plain", "data": f"[ERROR: Failed to download content for {file_name}]"}
-
-    # Step 3: Encode the binary content in Base64 and return it in a structured way.
-    base64_encoded_data = base64.b64encode(file_bytes).decode('utf-8')
-
-    return {
-        "mime_type": content_type,
-        "data": base64_encoded_data
-    }
+        logger.error(f"Failed to get attachment content for ID {attachment_id}: {e}", exc_info=True)
+        return f"[ERROR: Could not process attachment {attachment_id}]"
 
 
 @mcp.tool
 async def update_work_package_description(work_package_id: int, description: str) -> Dict[str, Any]:
     """
-    Updates ONLY the description of a work package. It automatically handles
-    fetching the latest lockVersion to ensure the update succeeds.
+    Updates ONLY the description of a work package.
+    Handles technical details like lockVersion automatically.
+    Returns a simple success confirmation message upon completion.
+    This is a final action; do not call other tools to verify after using this one.
     """
-    logger.info(f"Tool executed: update_work_package_description(id={work_package_id})")
-
+    logger.info(f"Tool Action: update_work_package_description(id={work_package_id})")
     latest_wp = await _get_raw_work_package_details(work_package_id)
-
     payload = {
         "lockVersion": latest_wp["lockVersion"],
         "description": {"raw": description, "format": "markdown"}
     }
-
     response = await client.patch(f"/api/v3/work_packages/{work_package_id}", json=payload)
     response.raise_for_status()
-    return response.json()
+    updated_wp = response.json()
+    return {
+        "status": "Success",
+        "message": "Description updated.",
+        "newLockVersion": updated_wp.get("lockVersion")
+    }
 
 
 @mcp.tool
 async def update_work_package_status(work_package_id: int, status_id: int) -> Dict[str, Any]:
     """
-    Updates ONLY the status of a work package. It automatically handles
-    fetching the latest lockVersion.
+    Updates ONLY the status of a work package to a new status ID.
+    Handles technical details like lockVersion automatically.
+    Returns a simple success confirmation message upon completion.
+    This is a final action; do not call other tools to verify after using this one.
     """
-    logger.info(f"Tool executed: update_work_package_status(id={work_package_id}, status_id={status_id})")
-
+    logger.info(f"Tool Action: update_work_package_status(id={work_package_id}, status_id={status_id})")
     latest_wp = await _get_raw_work_package_details(work_package_id)
-
     payload = {
         "lockVersion": latest_wp["lockVersion"],
         "_links": {"status": {"href": f"/api/v3/statuses/{status_id}"}}
     }
-
-    # 2. Realizar la actualización
     response = await client.patch(f"/api/v3/work_packages/{work_package_id}", json=payload)
     response.raise_for_status()
-    return response.json()
+    updated_wp = response.json()
+    return {
+        "status": "Success",
+        "message": "Status updated.",
+        "newLockVersion": updated_wp.get("lockVersion")
+    }
 
 
 @mcp.tool

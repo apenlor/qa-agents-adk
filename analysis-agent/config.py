@@ -14,8 +14,10 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger("analysis-agent-logger")
+# --- SILENCE NOISY LIBRARY LOGS ---
 logging.getLogger("google_adk.google.adk.tools.base_authenticated_tool").setLevel(logging.ERROR)
 logging.getLogger("google_adk.google.adk.models.google_llm").setLevel(logging.WARNING)
+logging.getLogger("google_genai.types").setLevel(logging.ERROR)
 
 def _get_required_env(var_name: str) -> str:
     """Gets a required environment variable, raising an error if not found."""
