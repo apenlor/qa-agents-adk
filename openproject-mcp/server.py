@@ -11,16 +11,32 @@ mcp = FastMCP(name="OpenProject (ad-hoc) MCP Server")
 client = httpx.AsyncClient(base_url=OPENPROJECT_URL, auth=("apikey", OPENPROJECT_API_KEY))
 
 
-@mcp.tool
-async def get_work_package_details(work_package_id: int) -> Dict[str, Any]:
-    """
-    Gets the full details of a specific work package, including its lockVersion,
-    description, and other attributes.
-    """
+async def _get_raw_work_package_details(work_package_id)-> Dict[str, Any]:
     logger.info(f"Tool executed: get_work_package_details(id={work_package_id})")
     response = await client.get(f"/api/v3/work_packages/{work_package_id}")
     response.raise_for_status()
     return response.json()
+
+@mcp.tool
+async def get_work_package_details(work_package_id: int) -> Dict[str, Any]:
+    """
+    Gets a filtered, essential set of details for a specific work package.
+    This provides the agent with only the information it needs, reducing token usage
+    and simplifying its context.
+    """
+    logger.info(f"Tool executed: get_work_package_details(id={work_package_id})")
+    full_wp = await _get_raw_work_package_details(work_package_id)
+
+    # Extract only the fields the agent absolutely needs.
+    filtered_details = {
+        "id": full_wp.get("id"),
+        "subject": full_wp.get("subject"),
+        "lockVersion": full_wp.get("lockVersion"),
+        "description": full_wp.get("description", {}).get("raw"),
+        "status": full_wp.get("_embedded", {}).get("status", {}).get("name"),
+    }
+    logger.info(f"Returning filtered details for WP {work_package_id}: {filtered_details}")
+    return filtered_details
 
 
 @mcp.tool
@@ -77,33 +93,41 @@ async def get_attachment_content(attachment_id: int) -> Dict[str, str]:
 
 
 @mcp.tool
-async def update_work_package_description(work_package_id: int, lock_version: int, description: str) -> Dict[str, Any]:
-    """Updates ONLY the description of a work package."""
+async def update_work_package_description(work_package_id: int, description: str) -> Dict[str, Any]:
+    """
+    Updates ONLY the description of a work package. It automatically handles
+    fetching the latest lockVersion to ensure the update succeeds.
+    """
     logger.info(f"Tool executed: update_work_package_description(id={work_package_id})")
+
+    latest_wp = await _get_raw_work_package_details(work_package_id)
+
     payload = {
-        "lockVersion": lock_version,
-        "description": {
-            "raw": description,
-            "format": "markdown"
-        }
+        "lockVersion": latest_wp["lockVersion"],
+        "description": {"raw": description, "format": "markdown"}
     }
+
     response = await client.patch(f"/api/v3/work_packages/{work_package_id}", json=payload)
     response.raise_for_status()
     return response.json()
 
 
 @mcp.tool
-async def update_work_package_status(work_package_id: int, lock_version: int, status_id: int) -> Dict[str, Any]:
-    """Updates ONLY the status of a work package using a status ID."""
+async def update_work_package_status(work_package_id: int, status_id: int) -> Dict[str, Any]:
+    """
+    Updates ONLY the status of a work package. It automatically handles
+    fetching the latest lockVersion.
+    """
     logger.info(f"Tool executed: update_work_package_status(id={work_package_id}, status_id={status_id})")
+
+    latest_wp = await _get_raw_work_package_details(work_package_id)
+
     payload = {
-        "lockVersion": lock_version,
-        "_links": {
-            "status": {
-                "href": f"/api/v3/statuses/{status_id}"
-            }
-        }
+        "lockVersion": latest_wp["lockVersion"],
+        "_links": {"status": {"href": f"/api/v3/statuses/{status_id}"}}
     }
+
+    # 2. Realizar la actualización
     response = await client.patch(f"/api/v3/work_packages/{work_package_id}", json=payload)
     response.raise_for_status()
     return response.json()

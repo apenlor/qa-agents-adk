@@ -15,7 +15,7 @@ from google.genai.types import ToolConfig, GenerateContentConfig, FunctionCallin
 # Initializes ToolSet
 toolset = MCPToolset(
     connection_params=StreamableHTTPConnectionParams(
-        url="http://openproject-mcp:8000/mcp",
+        url="http://openproject-mcp:8000/mcp/",
     )
 )
 # Create the tool configuration to disable the model's automatic loop
@@ -25,7 +25,7 @@ tool_config = ToolConfig(function_calling_config=FunctionCallingConfig(
 
 analysis_agent = LlmAgent(
     name="analysis_agent_v1",
-    model="gemini-2.5-flash",
+    model="gemini-2.0-flash",
     description="An autonomous agent that analyzes, updates, and transitions OpenProject work packages.",
     instruction="""
     You are an autonomous Senior Business Analyst. You have a set of specific tools to process an OpenProject work package.
