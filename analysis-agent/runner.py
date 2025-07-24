@@ -27,12 +27,21 @@ def _log_agent_event(event: Event) -> None:
         # Ignore events not from our agent (e.g., initial user query)
         return
 
-    logging.info(f"EVNTO:  {event}")
-
     if event.content and event.content.parts:
+
+        function_calls = event.get_function_calls()
+        if function_calls:
+            for fc in function_calls:
+                # Si se llama a exit_loop, lo tratamos como la respuesta final.
+                if fc.name == 'exit_loop':
+                    summary = fc.args.get('summary', 'Workflow completed without a summary.')
+                    logger.info(f"🤖 Agent -> Final Summary: {summary}")
+                else:
+                    logger.info(f"🛠️  Agent -> Action: Calling {fc.name}(...)")
+            return
+
         function_responses = event.get_function_responses()
         if function_responses:
-            logger.info("---------------------- AGENT EVENT ----------------------")
             for fr in function_responses:
                 response_payload = fr.response.get("result")
                 if isinstance(response_payload, CallToolResult):
@@ -54,15 +63,11 @@ def _log_agent_event(event: Event) -> None:
                         logger.info(log_summary)
                 else:
                     logger.info(f"✅ Tool '{fr.name}' returned a non-standard response.")
-            return
 
-        # Check for simple text messages (thoughts or final response)
-        if event.content.parts[0].text:
-            if event.is_final_response():
+        # Keeping it for failure texts situations
+        elif event.is_final_response() and event.author == analysis_agent.name:
+            if event.content and event.content.parts and event.content.parts[0].text:
                 logger.info(f"🤖 Agent -> Final Response: {event.content.parts[0].text.strip()}")
-            else:
-                # If it's not a tool call/response and not final, it's a thought.
-                logger.info(f"🤔 Agent -> Thought: {event.content.parts[0].text.strip()}")
 
 
 async def execute_analysis(work_package_id: int):

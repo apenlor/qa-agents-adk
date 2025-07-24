@@ -1,4 +1,6 @@
+# analysis-agent/agent.py
 from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StreamableHTTPConnectionParams
+from google.adk.tools.tool_context import ToolContext
 from google.adk.agents import LlmAgent
 from google.genai.types import ToolConfig, GenerateContentConfig, FunctionCallingConfig, FunctionCallingConfigMode
 
@@ -18,6 +20,15 @@ toolset = MCPToolset(
         url="http://openproject-mcp:8000/mcp/",
     )
 )
+
+def exit_loop(summary: str, tool_context: ToolContext):
+    """
+    Call this as the absolute final step to complete the mission.
+    Provide a one-sentence summary of the work done.
+    """
+    tool_context.actions.escalate = True
+    return {"status": "complete", "summary": summary}
+
 # Create the tool configuration to disable the model's automatic loop
 tool_config = ToolConfig(function_calling_config=FunctionCallingConfig(
     mode=FunctionCallingConfigMode.ANY
@@ -25,10 +36,10 @@ tool_config = ToolConfig(function_calling_config=FunctionCallingConfig(
 
 analysis_agent = LlmAgent(
     name="analysis_agent_v1",
-    model="gemini-2.5-flash",
+    model="gemini-2.5-pro",
     description="An autonomous agent that analyzes, updates, and transitions OpenProject work packages.",
     instruction="""
-    You are an autonomous Senior Business Analyst. Your goal is to process an OpenProject work package by following the detailed steps for execution. You will only execute one iteration of these steps. Concluding with a final output that must be a single, brief sentence summarizing the work done. 
+    You are an autonomous Senior Business Analyst. Your goal is to process an OpenProject work package by following the detailed steps for execution. You will only execute one iteration of these steps. 
     
     **Steps for execution:**
     1.  Use `get_work_package_attachments` to find attachments for the given work package ID.
@@ -36,9 +47,10 @@ analysis_agent = LlmAgent(
     3.  Based on the attachment contents, that can either be image or text, formulate a new `description` and `acceptance_criteria`.
     4.  Call `update_work_package_description` with the new description. If response contains "Success", the step is complete.
     5.  Call `list_statuses` to find the numerical ID for the "Specified" status.
-    6.  Call `update_work_package_status` with the work package ID and the status ID you found. If response contains "Success", the step is complete.
+    6.  Call `update_work_package_status` with the work package ID and the status ID you found.
+    7.  Conclude your work by calling the `exit_loop` tool. Provide a single, brief sentence summarizing the work you did in the `summary` parameter.
     """,
-    tools=[toolset],
+    tools=[toolset, exit_loop],
     generate_content_config=GenerateContentConfig(tool_config=tool_config)
 )
 
