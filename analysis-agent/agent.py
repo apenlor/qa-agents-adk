@@ -15,6 +15,13 @@ from google.genai.types import ToolConfig, GenerateContentConfig, FunctionCallin
 
 
 # Initializes ToolSet
+REQUIRED_TOOLS = [
+    "get_work_package_attachments",
+    "get_attachment_content",
+    "update_work_package_description",
+    "update_work_package_status",
+    "list_statuses"
+]
 toolset = MCPToolset(
     connection_params=StreamableHTTPConnectionParams(
         url="http://openproject-mcp:8000/mcp/",
@@ -54,4 +61,4 @@ analysis_agent = LlmAgent(
     generate_content_config=GenerateContentConfig(tool_config=tool_config)
 )
 
-print(f"Agent '{analysis_agent.name}' created with full MCP toolset.")
+print(f"Agent '{analysis_agent.name}' created with a focused toolset of {len(REQUIRED_TOOLS)} tools.")

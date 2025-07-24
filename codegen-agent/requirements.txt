@@ -1,1 +1,6 @@
 # codegen-agent/requirements.txt
+google-adk
+mcp
+fastapi
+uvicorn
+python-dotenv

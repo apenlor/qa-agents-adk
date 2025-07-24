@@ -1,14 +1,14 @@
-# analysis-agent/runner.py
+# codegen-agent/runner.py
 from google.adk.events import Event
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
-from agent import analysis_agent
+from agent import codegen_agent
 from config import logger
 from logger_utils import log_agent_event
 
-APP_NAME = "analysis-agent-app"
+APP_NAME = "codegen-agent-app"
 USER_ID = "user_1"
 
 
@@ -17,13 +17,13 @@ USER_ID = "user_1"
 async def _setup_runner_and_session(work_package_id: int) -> (str, Runner):
     """Initializes and returns the session and the agent runner."""
     session_service = InMemorySessionService()
-    session_id = f"wp_analysis_{work_package_id}"
+    session_id = f"wp_codegen_{work_package_id}"
     await session_service.create_session(
         app_name=APP_NAME, user_id=USER_ID, session_id=session_id
     )
     logger.info(f"Session created: App='{APP_NAME}', User='{USER_ID}', Session='{session_id}'")
     runner = Runner(
-        agent=analysis_agent,
+        agent=codegen_agent,
         app_name=APP_NAME,
         session_service=session_service,
     )
@@ -73,15 +73,16 @@ async def _process_agent_events(
 
 # --- Main Orchestration Function ---
 
-async def execute_analysis(work_package_id: int):
+async def execute_codegen(work_package_id: int):
     """
     Orchestrates the agent execution workflow by delegating to helper functions.
     """
     session_id, runner = await _setup_runner_and_session(work_package_id)
 
     query_text = (
-        f"Begin the analysis and specification workflow for work package {work_package_id}. "
-        "Follow your instructions to analyze its attachments, update its content, and move it to the 'Specified' state."
+        f"Your mission is to process work package {work_package_id}. "
+        "Follow your workflow to analyze its requirements, generate the Robot Framework tests, "
+        "and attach the resulting test file."
     )
     logger.info(f"Initial query for the agent: '{query_text}'")
     query_content = types.Content(role="user", parts=[types.Part(text=query_text)])

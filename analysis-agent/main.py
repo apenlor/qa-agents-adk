@@ -13,9 +13,7 @@ async def lifespan(app: FastAPI):
     The MCPToolset maintains a persistent network connection, which must be
     closed gracefully on shutdown to prevent resource leaks.
     """
-    # El código aquí se ejecuta al arrancar la aplicación (si es necesario)
     yield
-    # El código aquí se ejecuta al apagar la aplicación
     logger.info("Application is shutting down. Closing MCP toolset connection...")
     if analysis_agent.tools:
         await analysis_agent.tools[0].close()

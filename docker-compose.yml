@@ -66,6 +66,22 @@ services:
       - qe-agents-network
     restart: on-failure
 
+  codegen-agent:
+    build:
+      context: ./codegen-agent
+      dockerfile: Dockerfile
+    container_name: codegen-agent
+    env_file:
+      - ./codegen-agent/.env
+    ports:
+      - "8082:8082"
+    depends_on:
+      openproject-mcp:
+        condition: service_started
+    networks:
+      - qe-agents-network
+    restart: on-failure
+
 volumes:
   op_pgdata:
   op_assets:

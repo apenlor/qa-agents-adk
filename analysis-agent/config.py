@@ -1,4 +1,4 @@
-# ./openproject-mcp/config.py
+# ./analysis-agent/config.py
 
 import logging
 import os
