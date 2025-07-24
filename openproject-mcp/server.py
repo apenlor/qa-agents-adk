@@ -1,9 +1,12 @@
 # openproject-mcp/server.py
 import httpx
 import json
+import base64
 from fastmcp import FastMCP
-from typing import List, Dict, Any, Union
-from fastmcp.utilities.types import Image
+from typing import List, Dict, Any
+
+from fastmcp.tools.tool import ToolResult
+from mcp.types import ImageContent, TextContent
 
 from config import logger, OPENPROJECT_API_KEY, OPENPROJECT_URL
 
@@ -11,11 +14,12 @@ mcp = FastMCP(name="OpenProject (ad-hoc) MCP Server")
 client = httpx.AsyncClient(base_url=OPENPROJECT_URL, auth=("apikey", OPENPROJECT_API_KEY))
 
 
-async def _get_raw_work_package_details(work_package_id)-> Dict[str, Any]:
+async def _get_raw_work_package_details(work_package_id) -> Dict[str, Any]:
     logger.debug(f"Fetching raw details for work package ID: {work_package_id}")
     response = await client.get(f"/api/v3/work_packages/{work_package_id}")
     response.raise_for_status()
     return response.json()
+
 
 @mcp.tool
 async def get_work_package_details(work_package_id: int) -> Dict[str, Any]:
@@ -33,6 +37,7 @@ async def get_work_package_details(work_package_id: int) -> Dict[str, Any]:
     logger.info(f"Tool Success: get_work_package_details -> Returning filtered details for WP {work_package_id}")
     return filtered_details
 
+
 @mcp.tool
 async def get_work_package_attachments(work_package_id: int) -> List[Dict[str, Any]]:
     """Lists all attachments for a given work package, returning their metadata (like ID and name)."""
@@ -43,7 +48,7 @@ async def get_work_package_attachments(work_package_id: int) -> List[Dict[str, A
 
 
 @mcp.tool
-async def get_attachment_content(attachment_id: int) -> Union[Image, str]:
+async def get_attachment_content(attachment_id: int) -> ToolResult | None:
     """
     Gets the content of a single attachment. If the attachment is an image,
     it returns an ImageContent. Otherwise, it returns the content as a plain string.
@@ -64,15 +69,16 @@ async def get_attachment_content(attachment_id: int) -> Union[Image, str]:
         file_bytes = content_response.content
 
         if content_type.startswith('image/'):
-            logger.info(f"Returning fastmcp.utilities.types.Image for '{file_name}'.")
-            return Image(data=file_bytes)
+            logger.info(f"Returning ImageContent for '{file_name}'.")
+            base64_encoded_data = base64.b64encode(file_bytes).decode('utf-8')
+            return ToolResult(content=[ImageContent(data=base64_encoded_data, mimeType=content_type, type="image")])
         else:
-            logger.info(f"Returning plain string for '{file_name}'.")
-            return file_bytes.decode('utf-8', errors='replace')
+            logger.info(f"Returning TextContent for '{file_name}'.")
+            text_content = file_bytes.decode('utf-8', errors='replace')
+            return ToolResult(content=[TextContent(text=text_content, type="text")])
 
     except Exception as e:
         logger.error(f"Failed to get attachment content for ID {attachment_id}: {e}", exc_info=True)
-        return f"[ERROR: Could not process attachment {attachment_id}]"
 
 
 @mcp.tool

@@ -3,7 +3,7 @@ from typing import Any, Dict, List
 
 from google.adk.events import Event
 from google.genai import types
-from mcp.types import CallToolResult
+from mcp.types import CallToolResult, ImageContent, TextContent
 
 from agent import analysis_agent
 from config import logger
@@ -14,38 +14,26 @@ from config import logger
 def _format_wp_details(data: Dict[str, Any]) -> str:
     """Formats a log summary for get_work_package_details."""
     return (
-        f" -> [ID: {data.get('id')}, Subject: '{data.get('subject')}', "
-        f"lockVersion: {data.get('lockVersion')}]"
+        f" -> [ID: {data.get('id')}, Status: '{data.get('status')}', "
+        f"Subject: '{data.get('subject')}']"
     )
 
 
 def _format_wp_attachments(data: List[Dict[str, Any]]) -> str:
     """Formats a log summary for get_work_package_attachments."""
-    filenames = [att.get("fileName", "N/A") for att in data if isinstance(att, dict)]
-    return f" -> Found {len(data)} attachment(s): {filenames}"
+    return f" -> Found {len(data)} attachment(s)"
 
 
-def _format_attachment_content(data: Dict[str, Any]) -> str:
+def _format_attachment_content(content_block: Any) -> str:
     """Formats a log summary for get_attachment_content."""
-    mime_type = data.get("mime_type", "N/A")
-    data_size_kb = len(data.get("data", b"")) / 1024
-    return f" -> [Content received: {mime_type}, ~{data_size_kb:.1f} KB]"
-
-
-def _format_tool_success_log(tool_name: str, data: Any) -> str:
-    """Creates a detailed log summary for a successful tool call using a formatter."""
-    base_log = f"✅ Tool Success: {tool_name}"
-    formatters = {
-        "get_work_package_details": _format_wp_details,
-        "get_work_package_attachments": _format_wp_attachments,
-        "get_attachment_content": _format_attachment_content,
-    }
-    # Only format if the data type is correct for the formatter
-    if formatter := formatters.get(tool_name):
-        if (isinstance(data, dict) and tool_name != "get_work_package_attachments") or \
-                (isinstance(data, list) and tool_name == "get_work_package_attachments"):
-            return base_log + formatter(data)
-    return base_log
+    if isinstance(content_block, ImageContent):
+        mime_type = content_block.mimeType or 'N/A'
+        data_size_kb = len(content_block.data) * 3 / 4 / 1024
+        return f" -> [Content received: {mime_type}, ~{data_size_kb:.1f} KB]"
+    elif isinstance(content_block, TextContent):
+        data_size_kb = len(content_block.text.encode('utf-8')) / 1024
+        return f" -> [Content received: text/plain, ~{data_size_kb:.1f} KB]"
+    return " -> [Content received but format is unrecognized]"
 
 
 # --- Event Logging Helpers ---
@@ -60,6 +48,27 @@ def _log_function_calls(function_calls: List[types.FunctionCall]) -> None:
             logger.info(f"🛠️  Agent -> Action: Calling {fc.name}(...)")
 
 
+def _format_tool_success_log(tool_name: str, result: CallToolResult) -> str:
+    """Creates a detailed log summary for a successful tool call."""
+    base_log = f"✅ Tool Success: {tool_name}"
+
+    if result.structuredContent is not None:
+        data = result.structuredContent
+        if tool_name in ['get_work_package_details', 'get_work_package_attachments']:
+            formatter = {
+                "get_work_package_details": _format_wp_details,
+                "get_work_package_attachments": _format_wp_attachments,
+            }.get(tool_name)
+            return base_log + formatter(data) if formatter else base_log
+
+    elif result.content:
+        data = result.content[0]
+        if tool_name == 'get_attachment_content':
+            return base_log + _format_attachment_content(data)
+
+    return base_log
+
+
 def _log_function_responses(function_responses: List[types.FunctionResponse]) -> None:
     """Logs the results from tool executions."""
     for fr in function_responses:
@@ -69,7 +78,7 @@ def _log_function_responses(function_responses: List[types.FunctionResponse]) ->
                 error_msg = response_payload.content[0].text if response_payload.content else "Unknown error"
                 logger.warning(f"❌ Tool Error in '{fr.name}': {error_msg}")
             else:
-                log_summary = _format_tool_success_log(fr.name, response_payload.structuredContent)
+                log_summary = _format_tool_success_log(fr.name, response_payload)
                 logger.info(log_summary)
         else:
             logger.info(f"✅ Tool '{fr.name}' returned a non-standard response.")
@@ -89,5 +98,4 @@ def log_agent_event(event: Event) -> None:
     elif function_responses := event.get_function_responses():
         _log_function_responses(function_responses)
     elif event.is_final_response() and event.content and event.content.parts:
-        # This handles cases where the agent outputs text instead of calling a tool.
         logger.info(f"🤖 Agent -> Final Response: {event.content.parts[0].text.strip()}")
