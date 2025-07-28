@@ -1,0 +1,18 @@
+Feature: User Login and Authentication
+
+As a registered user,
+I want to log in to the system securely,
+So that I can access my personalized dashboard and tasks.
+
+**Description:**
+The system requires a standard login interface where users can enter their username and password. Upon successful authentication, the user should be redirected to their main dashboard and greeted with a personalized message. The system must handle incorrect login attempts gracefully by displaying a clear error message without revealing whether the username or password was the incorrect component.
+
+**Acceptance Criteria:**
+- GIVEN a user is on the login page
+- WHEN they enter a valid username and password
+- THEN they are redirected to their dashboard.
+- AND THEN a welcome message like "Welcome, [Username]!" is displayed.
+- GIVEN a user is on the login page
+- WHEN they enter an invalid username or password
+- THEN an error message "Invalid credentials, please try again." is displayed.
+- AND THEN the user remains on the login page.`

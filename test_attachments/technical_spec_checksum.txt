@@ -1,0 +1,10 @@
+Requirement ID: SUWA-COZY5443
+Title: Manifest integrity checksum check failed
+
+GIVEN <CoZy Dashboard> has computed the received Manifest integrity checksum
+WHEN the computed value does not match the integrityChecksum of the received Manifest
+THEN <CoZy Dashboard> shall:
+- set the synchronization state to SynchroNeeded and store the current date as last synchronization date
+- store the integrityChecksum of the received Manifest for future synchronization calls
+- store a ManifestStatus object with error code FAILED / MANIFEST_INVALID_CHECKSUM
+- start a status flush procedure

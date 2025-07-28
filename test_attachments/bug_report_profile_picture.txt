@@ -1,0 +1,13 @@
+Bug Report: Profile Picture Upload Fails for Large Files
+
+Observed Behavior:
+When a user attempts to upload a profile picture larger than 2MB, the upload process fails silently. The loading spinner continues indefinitely, and no error message is displayed to the user. The old profile picture remains.
+
+Expected Behavior:
+The system should enforce a file size limit of 5MB. If a user attempts to upload a file larger than this limit, the system should prevent the upload and display a clear, user-friendly error message, such as "File size cannot exceed 5MB."
+
+Steps to Reproduce:
+- Log in to a user account.
+- Navigate to Account Settings.
+- Attempt to upload a JPEG or PNG file that is larger than 5MB.
+- Observe the lack of feedback and the failed upload.
