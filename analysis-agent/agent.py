@@ -1,8 +1,11 @@
 # analysis-agent/agent.py
-from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StreamableHTTPConnectionParams
-from google.adk.tools.tool_context import ToolContext
+import os
 from google.adk.agents import LlmAgent
+from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StreamableHTTPConnectionParams
 from google.genai.types import ToolConfig, GenerateContentConfig, FunctionCallingConfig, FunctionCallingConfigMode
+from google.adk.tools.tool_context import ToolContext
+from google.adk.agents.readonly_context import ReadonlyContext
+
 
 # --- POC Design Comment ---
 # In this POC, we are giving the agent full control over the workflow to test
@@ -14,8 +17,61 @@ from google.genai.types import ToolConfig, GenerateContentConfig, FunctionCallin
 # POC, this approach demonstrates the full potential of an autonomous agent.
 
 
-# Initializes ToolSet
-REQUIRED_TOOLS = [
+def _load_examples_as_text() -> str:
+    """
+    Reads markdown example files from the 'examples' directory and formats
+    them into a single string to be injected into the main instruction prompt.
+    """
+    example_files = [
+        "examples/technical_requirements_example.md",
+        "examples/user_feature_example.md"
+    ]
+    all_examples_text = ""
+    for file_path in example_files:
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                all_examples_text += f"--- Example: {os.path.basename(file_path)} ---\n"
+                all_examples_text += content
+                all_examples_text += "\n\n"
+        except FileNotFoundError:
+            print(f"Warning: Example file not found at {file_path}. It will be omitted from the prompt.")
+    return all_examples_text
+
+
+INSTRUCTION_TEMPLATE = """
+You are an expert Senior Business Analyst. Your goal is to process an OpenProject work package by analyzing its attachments and generating a high-quality, formatted markdown description.
+
+**Your Mission:**
+You will be given a work package ID. You must fully specify the work package based on its attachments and then move it to the "Specified" state.
+
+---
+**REFERENCE EXAMPLES**
+Here are golden-standard examples of how to transform raw requirements into a well-structured markdown block. Use them to guide the quality and format of your output.
+
+{analysis_examples}
+---
+
+**High-Level Workflow & Tool Guide:**
+1.  **Find and Read Attachments:** Use `get_work_package_attachments` and `get_attachment_content` to read the content 
+of all attachments. If there are no attachments, call `exit_loop` and report this.
+2.  **Analyze & Generate Markdown:** Based on the content, formulate a new description and a list of acceptance criteria. 
+Combine them into a **single block of markdown text**. The description should be a paragraph, followed by a blank line, 
+the title "**Acceptance Criteria:**", and a bulleted list of the criteria. If an attachment is an image, perform OCR 
+to extract all visible text and analyze the layout. Treat the extracted text and visual structure exactly as if it were 
+a text document.
+3.  **Update Description:** Call `update_work_package_description` with the complete markdown block you just generated.
+4.  **Find Status ID:** Call `list_statuses` to find the numerical ID for the "Specified" status.
+5.  **Update Status:** Call `update_work_package_status` with the work package ID and the status ID you found.
+6.  **Final Step:** Call `exit_loop` with a summary of your work.
+"""
+
+"""
+Factory function to build the analysis agent, loading examples from disk
+and injecting them into a context-rich instruction prompt.
+"""
+required_tools = [
+    "get_work_package_details",
     "get_work_package_attachments",
     "get_attachment_content",
     "update_work_package_description",
@@ -23,42 +79,34 @@ REQUIRED_TOOLS = [
     "list_statuses"
 ]
 toolset = MCPToolset(
-    connection_params=StreamableHTTPConnectionParams(
-        url="http://openproject-mcp:8000/mcp/",
-    )
+    connection_params=StreamableHTTPConnectionParams(url="http://openproject-mcp:8000/mcp/"),
+    tool_filter=required_tools
 )
 
+
 def exit_loop(summary: str, tool_context: ToolContext):
-    """
-    Call this as the absolute final step to complete the mission.
-    Provide a one-sentence summary of the work done.
-    """
+    """Call this as the absolute final step to complete the mission."""
     tool_context.actions.escalate = True
     return {"status": "complete", "summary": summary}
 
-# Create the tool configuration to disable the model's automatic loop
-tool_config = ToolConfig(function_calling_config=FunctionCallingConfig(
-    mode=FunctionCallingConfigMode.ANY
-))
+
+tool_config = ToolConfig(function_calling_config=FunctionCallingConfig(mode=FunctionCallingConfigMode.ANY))
+generate_content_config = GenerateContentConfig(tool_config=tool_config)
+
+
+def instruction_provider(ctx: ReadonlyContext) -> str:
+    """Assembles the final instruction prompt at runtime to bypass template substitution."""
+    analysis_examples = _load_examples_as_text()
+    return INSTRUCTION_TEMPLATE.format(analysis_examples=analysis_examples)
+
 
 analysis_agent = LlmAgent(
     name="analysis_agent_v1",
     model="gemini-2.5-pro",
     description="An autonomous agent that analyzes, updates, and transitions OpenProject work packages.",
-    instruction="""
-    You are an autonomous Senior Business Analyst. Your goal is to process an OpenProject work package by following the detailed steps for execution. You will only execute one iteration of these steps. 
-    
-    **Steps for execution:**
-    1.  Use `get_work_package_attachments` to find attachments for the given work package ID.
-    2.  Use `get_attachment_content` to read the content of all found attachments. If there are no attachments, your final response must be "No attachments found for work package [ID]. Cannot proceed."
-    3.  Based on the attachment contents, that can either be image or text, formulate a new `description` and `acceptance_criteria`.
-    4.  Call `update_work_package_description` with the new description. If response contains "Success", the step is complete.
-    5.  Call `list_statuses` to find the numerical ID for the "Specified" status.
-    6.  Call `update_work_package_status` with the work package ID and the status ID you found.
-    7.  Conclude your work by calling the `exit_loop` tool. Provide a single, brief sentence summarizing the work you did in the `summary` parameter.
-    """,
+    instruction=instruction_provider,
     tools=[toolset, exit_loop],
-    generate_content_config=GenerateContentConfig(tool_config=tool_config)
+    generate_content_config=generate_content_config
 )
 
-print(f"Agent '{analysis_agent.name}' created with a focused toolset of {len(REQUIRED_TOOLS)} tools.")
+print(f"Agent '{analysis_agent.name}' created with file-based examples.")

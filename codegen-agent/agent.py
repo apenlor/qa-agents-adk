@@ -6,6 +6,14 @@ from google.genai.types import ToolConfig, GenerateContentConfig, FunctionCallin
 from google.adk.tools.tool_context import ToolContext
 from google.adk.agents.readonly_context import ReadonlyContext
 
+# --- POC Design Comment ---
+# In this POC, we are giving the agent full control over the workflow to test
+# its reasoning and tool-use capabilities, triggered by an API call.
+# The agent will discover and orchestrate the necessary tools from the MCP server.
+#
+# In a production scenario, we might add more safety rails (like direct calls to
+# the API for downloading attachments or performing the work package update), but for a
+# POC, this approach demonstrates the full potential of an autonomous agent.
 
 def _load_examples_as_text() -> str:
     """
@@ -82,10 +90,12 @@ def exit_loop(summary: str, tool_context: ToolContext):
 tool_config = ToolConfig(function_calling_config=FunctionCallingConfig(mode=FunctionCallingConfigMode.ANY))
 generate_content_config = GenerateContentConfig(tool_config=tool_config)
 
+
 # Assemble the final instruction prompt by injecting the examples.
 def instruction_provider(ctx: ReadonlyContext) -> str:
     code_examples = _load_examples_as_text()
     return INSTRUCTION_TEMPLATE.format(code_examples=code_examples)
+
 
 # Create and return the agent instance.
 codegen_agent = LlmAgent(
