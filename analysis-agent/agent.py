@@ -55,11 +55,10 @@ Here are golden-standard examples of how to transform raw requirements into a we
 **High-Level Workflow & Tool Guide:**
 1.  **Find and Read Attachments:** Use `get_work_package_attachments` and `get_attachment_content` to read the content 
 of all attachments. If there are no attachments, call `exit_loop` and report this.
-2.  **Analyze & Generate Markdown:** Based on the content, formulate a new description and a list of acceptance criteria. 
-Combine them into a **single block of markdown text**. The description should be a paragraph, followed by a blank line, 
-the title "**Acceptance Criteria:**", and a bulleted list of the criteria. If an attachment is an image, perform OCR 
-to extract all visible text and analyze the layout. Treat the extracted text and visual structure exactly as if it were 
-a text document.
+2.  **Analyze & Generate Markdown:** The `get_attachment_content` tool is multi-modal. For PDFs, it will return a list 
+containing both the extracted text and any embedded images. You must analyze **all** of this content together to 
+understand the full context and formulate your `description` and `acceptance_criteria`. Combine them into a single 
+block of markdown.
 3.  **Update Description:** Call `update_work_package_description` with the complete markdown block you just generated.
 4.  **Find Status ID:** Call `list_statuses` to find the numerical ID for the "Specified" status.
 5.  **Update Status:** Call `update_work_package_status` with the work package ID and the status ID you found.

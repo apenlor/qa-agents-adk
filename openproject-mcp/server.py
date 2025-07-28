@@ -2,6 +2,7 @@
 import httpx
 import json
 import base64
+import fitz
 from fastmcp import FastMCP
 from typing import List, Dict, Any
 
@@ -48,37 +49,68 @@ async def get_work_package_attachments(work_package_id: int) -> List[Dict[str, A
 
 
 @mcp.tool
-async def get_attachment_content(attachment_id: int) -> ToolResult | None:
+async def get_attachment_content(attachment_id: int) -> ToolResult:
     """
-    Gets the content of a single attachment. If the attachment is an image,
-    it returns an ImageContent. Otherwise, it returns the content as a plain string.
+    Gets the content of an attachment.
+    - For images, returns an ImageContent block.
+    - For PDFs, extracts both text and images, returning a list of TextContent
+      and ImageContent blocks.
+    - For other files, returns a TextContent block.
     """
     logger.info(f"Tool executed: get_attachment_content(id={attachment_id})")
     try:
         meta_response = await client.get(f"/api/v3/attachments/{attachment_id}")
         meta_response.raise_for_status()
         attachment_data = meta_response.json()
-
         download_url = attachment_data["_links"]["downloadLocation"]["href"]
         file_name = attachment_data.get("fileName", "unknown_file")
         content_type = attachment_data.get("contentType", "application/octet-stream")
-        logger.info(f"Found download URL for '{file_name}' (type: {content_type})")
-
         content_response = await client.get(download_url)
         content_response.raise_for_status()
         file_bytes = content_response.content
 
-        if content_type.startswith('image/'):
+        content_blocks = []
+
+        if content_type.endswith('pdf'):
+            logger.info(f"'{file_name}' is a PDF. Extracting multi-modal content...")
+            extracted_text = f"--- Extracted Text from PDF: {file_name} ---\n\n"
+            image_count = 0
+            with fitz.open(stream=file_bytes, filetype="pdf") as doc:
+                for page_num, page in enumerate(doc):
+                    extracted_text += f"\n--- Page {page_num + 1} ---\n"
+                    extracted_text += page.get_text() + "\n"
+
+                    for img_index, img in enumerate(page.get_images(full=True)):
+                        xref = img[0]
+                        base_image = doc.extract_image(xref)
+                        image_bytes = base_image["image"]
+                        image_ext = base_image["ext"]
+
+                        content_blocks.append(ImageContent(
+                            data=base64.b64encode(image_bytes).decode('utf-8'),
+                            mimeType=f"image/{image_ext}",
+                            type="image"
+                        ))
+                        image_count += 1
+
+            content_blocks.insert(0, TextContent(text=extracted_text, type="text"))
+            logger.info(f"Extracted {len(extracted_text)} chars and {image_count} images from PDF.")
+
+        elif content_type.startswith('image/'):
             logger.info(f"Returning ImageContent for '{file_name}'.")
-            base64_encoded_data = base64.b64encode(file_bytes).decode('utf-8')
-            return ToolResult(content=[ImageContent(data=base64_encoded_data, mimeType=content_type, type="image")])
+            base64_data = base64.b64encode(file_bytes).decode('utf-8')
+            content_blocks.append(ImageContent(data=base64_data, mimeType=content_type, type="image"))
+
         else:
             logger.info(f"Returning TextContent for '{file_name}'.")
             text_content = file_bytes.decode('utf-8', errors='replace')
-            return ToolResult(content=[TextContent(text=text_content, type="text")])
+            content_blocks.append(TextContent(text=text_content, type="text"))
+
+        return ToolResult(content=content_blocks)
 
     except Exception as e:
         logger.error(f"Failed to get attachment content for ID {attachment_id}: {e}", exc_info=True)
+        return ToolResult(content=[TextContent(text=f"[ERROR: Could not process attachment {attachment_id}]")])
 
 
 @mcp.tool

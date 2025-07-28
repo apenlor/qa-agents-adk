@@ -24,16 +24,34 @@ def _format_wp_attachments(data: List[Dict[str, Any]]) -> str:
     return f" -> Found {len(data)} attachment(s)"
 
 
-def _format_attachment_content(content_block: Any) -> str:
-    """Formats a log summary for get_attachment_content."""
-    if isinstance(content_block, ImageContent):
-        mime_type = content_block.mimeType or 'N/A'
-        data_size_kb = len(content_block.data) * 3 / 4 / 1024
-        return f" -> [Content received: {mime_type}, ~{data_size_kb:.1f} KB]"
-    elif isinstance(content_block, TextContent):
-        data_size_kb = len(content_block.text.encode('utf-8')) / 1024
-        return f" -> [Content received: text/plain, ~{data_size_kb:.1f} KB]"
-    return " -> [Content received but format is unrecognized]"
+def _format_attachment_content(content_blocks: List[Any]) -> str:
+    """
+    Formats a log summary for get_attachment_content by analyzing the list
+    of received content blocks (text, images, etc.).
+    """
+    if not isinstance(content_blocks, list):
+        return " -> [Received content but in an unexpected format]"
+
+    text_blocks = [block for block in content_blocks if isinstance(block, TextContent)]
+    image_blocks = [block for block in content_blocks if isinstance(block, ImageContent)]
+
+    summary_parts = []
+    total_kb = 0
+
+    if text_blocks:
+        text_size_kb = sum(len(block.text.encode('utf-8')) for block in text_blocks) / 1024
+        total_kb += text_size_kb
+        summary_parts.append(f"{len(text_blocks)} text block(s)")
+
+    if image_blocks:
+        image_size_kb = sum(len(block.data) * 3 / 4 for block in image_blocks) / 1024
+        total_kb += image_size_kb
+        summary_parts.append(f"{len(image_blocks)} image(s)")
+
+    if not summary_parts:
+        return " -> [Received empty content]"
+
+    return f" -> [Received {', '.join(summary_parts)} (~{total_kb:.1f} KB total)]"
 
 
 # --- Event Logging Helpers ---
@@ -52,17 +70,18 @@ def _format_tool_success_log(tool_name: str, result: CallToolResult) -> str:
     """Creates a detailed log summary for a successful tool call."""
     base_log = f"✅ Tool Success: {tool_name}"
 
+    # Handle tools that return JSON in structuredContent
     if result.structuredContent is not None:
         data = result.structuredContent
-        if tool_name in ['get_work_package_details', 'get_work_package_attachments']:
-            formatter = {
-                "get_work_package_details": _format_wp_details,
-                "get_work_package_attachments": _format_wp_attachments,
-            }.get(tool_name)
-            return base_log + formatter(data) if formatter else base_log
+        if tool_name == 'get_work_package_details':
+            return base_log + _format_wp_details(data)
+        if tool_name == 'get_work_package_attachments':
+            return base_log + _format_wp_attachments(data)
 
+    # Handle tools that return a list of ContentBlocks
     elif result.content:
-        data = result.content[0]
+        # The data is the entire list of content blocks
+        data = result.content
         if tool_name == 'get_attachment_content':
             return base_log + _format_attachment_content(data)
 

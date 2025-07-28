@@ -4,7 +4,7 @@ This repository contains a Proof of Concept (POC) for integrating AI agents with
 custom MCP server and two autonomous agents built with
 the [Google Agent Development Kit](https://google.github.io/adk-docs/) (ADK).
 
-* The Analysis Agent reads requirements from work package attachments (text or images), generates a description and
+* The Analysis Agent reads requirements from work package attachments (text, pdf or images), generates a description and
   acceptance criteria, and updates the work package's status to 'Specified'.
 * The Codegen Agent reads the updated requirements, generates a Robot Framework test suite, attaches it to the work
   package, and updates the status to 'In testing'.
