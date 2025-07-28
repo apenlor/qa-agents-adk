@@ -1,4 +1,5 @@
 # QE Agents ADK - Testing code generation
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/962faad711df40aaaa5c392622ade899)](https://app.codacy.com/gh/apenlor/qa-agents-adk/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 
 This repository contains a Proof of Concept (POC) for integrating AI agents with an OpenProject instance. It features a
 custom MCP server and two autonomous agents built with
